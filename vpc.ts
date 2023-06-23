@@ -52,3 +52,26 @@ for (let i = 0; i < 2; i++) {
     });
     privateSubnets.push(privateSubnet);
 }
+
+// NAT gateway lives in the first public subnet so private-subnet tasks
+// can still pull images / reach the internet without public IPs.
+const natEip = new aws.ec2.Eip("nat-eip", { domain: "vpc" });
+
+const natGateway = new aws.ec2.NatGateway("app-nat", {
+    subnetId: publicSubnets[0].id,
+    allocationId: natEip.id,
+    tags: { Name: "ecs-case-study-nat" },
+});
+
+const privateRouteTable = new aws.ec2.RouteTable("private-rt", {
+    vpcId: vpc.id,
+    routes: [{ cidrBlock: "0.0.0.0/0", natGatewayId: natGateway.id }],
+    tags: { Name: "ecs-case-study-private-rt" },
+});
+
+privateSubnets.forEach((subnet, i) => {
+    new aws.ec2.RouteTableAssociation(`private-rta-${i}`, {
+        subnetId: subnet.id,
+        routeTableId: privateRouteTable.id,
+    });
+});
